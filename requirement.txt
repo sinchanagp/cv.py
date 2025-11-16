@@ -1,5 +1,5 @@
 streamlit
-opencv-python
-webcolors
+opencv-python-headless
 numpy
+webcolors
 Pillow
