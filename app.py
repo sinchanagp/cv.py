@@ -3,10 +3,10 @@ import numpy as np
 import streamlit as st
 from webcolors import CSS3_NAMES_TO_HEX, hex_to_rgb
 
-st.set_page_config(page_title="Real-Time Color Detection", layout="wide")
-st.title("🎨 Real-Time Color Detection App (OpenCV + Streamlit)")
+st.set_page_config(page_title="Color Detector", layout="wide")
+st.title("🎨 Smart Color Detection")
 
-# Function to get closest color name
+# ---------- Closest Color Finder ----------
 def closest_color(requested_color):
     r, g, b = map(int, requested_color)
     min_distance = float("inf")
@@ -24,48 +24,56 @@ def closest_color(requested_color):
 
     return closest_name, closest_hex.upper(), hex_to_rgb(closest_hex)
 
-start_camera = st.checkbox("Start Camera")
-frame_window = st.image([])
+# --------- Camera Input ---------
+img = st.camera_input("📷 Take a picture to begin")
 
-cap = cv2.VideoCapture(0)
+if img:
+    # Convert to OpenCV format
+    file_bytes = np.asarray(bytearray(img.read()), dtype=np.uint8)
+    frame = cv2.imdecode(file_bytes, 1)
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-while start_camera:
-    ret, frame = cap.read()
-    if not ret:
-        st.error("Camera not detected.")
-        break
+    st.write("👉 **Tap anywhere on the image to detect color**")
 
-    frame = cv2.resize(frame, (640, 480))
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # Display image
+    clicked_image = st.image(frame_rgb, caption="Tap on the image to detect color", use_column_width=True)
 
-    h, w, _ = rgb.shape
-    cx, cy = w // 2, h // 2
+    # Use query params to capture click events (mobile supported)
+    event = st.experimental_get_query_params()
 
-    box = 20
-    x1, y1 = cx - box, cy - box
-    x2, y2 = cx + box, cy + box
+    if "x" in event and "y" in event:
+        x = int(event["x"][0])
+        y = int(event["y"][0])
 
-    region = rgb[y1:y2, x1:x2]
-    avg_color = region.mean(axis=(0, 1)).astype(int)
+        # Keep inside bounds
+        y = min(y, frame_rgb.shape[0] - 1)
+        x = min(x, frame_rgb.shape[1] - 1)
 
-    color_name, hex_code, (r, g, b) = closest_color(avg_color)
+        # Extract color from clicked pixel
+        r, g, b = frame_rgb[y, x]
 
-    # Draw center square
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        # Get closest named color
+        color_name, hex_code, (nr, ng, nb) = closest_color((r, g, b))
 
-    # Text panel
-    info = np.zeros((120, 640, 3), dtype=np.uint8)
-    info[:] = (b, g, r)
+        st.subheader("🎯 Detected Color Information")
 
-    cv2.putText(info, f"Color: {color_name}", (10, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-    cv2.putText(info, f"RGB: ({r},{g},{b})", (10, 80),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-    cv2.putText(info, f"HEX: {hex_code}", (350, 80),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        col1, col2 = st.columns(2)
 
-    # Stack webcam + info
-    output = np.vstack((frame, info))
-    frame_window.image(cv2.cvtColor(output, cv2.COLOR_BGR2RGB))
+        with col1:
+            st.markdown("### 📌 Exact Clicked Color")
+            st.write(f"RGB: **({r}, {g}, {b})**")
+            st.write(
+                f"<div style='width:120px;height:120px;border-radius:10px;background-color:rgb({r},{g},{b});border:2px solid #000;'></div>",
+                unsafe_allow_html=True,
+            )
 
-cap.release()
+        with col2:
+            st.markdown("### 🌈 Closest Named Color")
+            st.write(f"Name: **{color_name}**")
+            st.write(f"HEX: **{hex_code}**")
+            st.write(
+                f"<div style='width:120px;height:120px;border-radius:10px;background-color:{hex_code};border:2px solid #000;'></div>",
+                unsafe_allow_html=True,
+            )
+
+        st.success("Tap another point on the image to detect a new color!")
